@@ -3,19 +3,19 @@ import { saveReport, saveHistory } from '../db/reportRepository.js';
 import { syncSingleReport } from '../services/syncManager.js';
 
 const CATEGORIES = [
-  { value: 'water_point', label: '💧 Water Point' },
-  { value: 'equipment', label: '⚡ Equipment' },
-  { value: 'service_interruption', label: '🚫 Service Interruption' },
-  { value: 'safety', label: '⚠️ Safety Hazard' },
-  { value: 'maintenance', label: '🔧 General Maintenance' },
-  { value: 'other', label: '📦 Other' },
+  { value: 'water_point', label: 'Water Point' },
+  { value: 'equipment', label: 'Equipment' },
+  { value: 'service_interruption', label: 'Service Interruption' },
+  { value: 'safety', label: 'Safety Hazard' },
+  { value: 'maintenance', label: 'General Maintenance' },
+  { value: 'other', label: 'Other Infrastructure' },
 ];
 
 const PRIORITIES = [
   { value: 'low', label: 'Low' },
   { value: 'medium', label: 'Medium' },
   { value: 'high', label: 'High' },
-  { value: 'critical', label: 'Critical 🔥' },
+  { value: 'critical', label: 'Critical' },
 ];
 
 export default function ReportForm({ onReportCreated, isOnline }) {
@@ -61,7 +61,6 @@ export default function ReportForm({ onReportCreated, isOnline }) {
     };
 
     try {
-      // 1. Save to local IndexedDB
       await saveReport(newReport);
       await saveHistory({
         reportId: newReport.id,
@@ -72,7 +71,6 @@ export default function ReportForm({ onReportCreated, isOnline }) {
         details: `Report created locally as ${targetStatus.toUpperCase()}.`,
       });
 
-      // 2. Trigger sync if online
       if (isOnline) {
         syncSingleReport(newReport.id).catch((err) =>
           console.warn('Background sync error after creation:', err)
@@ -81,12 +79,11 @@ export default function ReportForm({ onReportCreated, isOnline }) {
 
       setFeedback({
         type: 'success',
-        message: `Report created successfully (${targetStatus.toUpperCase()})! ${
-          isOnline ? 'Syncing with server...' : 'Saved locally (Pending Sync).'
+        message: `Report created successfully (${targetStatus.toUpperCase()}). ${
+          isOnline ? 'Syncing with server...' : 'Saved locally in IndexedDB (Pending Sync).'
         }`,
       });
 
-      // Reset form
       setDescription('');
       setLocation('');
       setCategory('water_point');
@@ -107,27 +104,29 @@ export default function ReportForm({ onReportCreated, isOnline }) {
   };
 
   return (
-    <div className="card form-card">
-      <div className="card-header">
-        <h2>📝 Report New Infrastructure Issue</h2>
-        <span className="card-subtitle">Works online and offline</span>
+    <div className="panel form-panel">
+      <div className="panel-header">
+        <div>
+          <h2 className="panel-title">Report New Infrastructure Issue</h2>
+          <p className="panel-desc">Record infrastructure damage or operational disruption. Works online and offline.</p>
+        </div>
       </div>
 
       {feedback && (
-        <div className={`alert alert-${feedback.type}`}>
+        <div className={`form-alert alert-${feedback.type}`}>
           {feedback.message}
         </div>
       )}
 
-      <form onSubmit={(e) => e.preventDefault()} className="report-form">
-        <div className="form-grid">
-          <div className="form-group">
-            <label htmlFor="category">Category *</label>
+      <form onSubmit={(e) => e.preventDefault()} className="issue-form">
+        <div className="field-grid">
+          <div className="field-group">
+            <label htmlFor="category" className="field-label">Category *</label>
             <select
               id="category"
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className={errors.category ? 'input-error' : ''}
+              className={`form-select ${errors.category ? 'has-error' : ''}`}
             >
               {CATEGORIES.map((cat) => (
                 <option key={cat.value} value={cat.value}>
@@ -135,16 +134,16 @@ export default function ReportForm({ onReportCreated, isOnline }) {
                 </option>
               ))}
             </select>
-            {errors.category && <span className="field-error">{errors.category}</span>}
+            {errors.category && <span className="error-text">{errors.category}</span>}
           </div>
 
-          <div className="form-group">
-            <label htmlFor="priority">Priority *</label>
+          <div className="field-group">
+            <label htmlFor="priority" className="field-label">Priority *</label>
             <select
               id="priority"
               value={priority}
               onChange={(e) => setPriority(e.target.value)}
-              className={errors.priority ? 'input-error' : ''}
+              className={`form-select ${errors.priority ? 'has-error' : ''}`}
             >
               {PRIORITIES.map((p) => (
                 <option key={p.value} value={p.value}>
@@ -152,49 +151,49 @@ export default function ReportForm({ onReportCreated, isOnline }) {
                 </option>
               ))}
             </select>
-            {errors.priority && <span className="field-error">{errors.priority}</span>}
+            {errors.priority && <span className="error-text">{errors.priority}</span>}
           </div>
         </div>
 
-        <div className="form-group">
-          <label htmlFor="location">Location *</label>
+        <div className="field-group">
+          <label htmlFor="location" className="field-label">Location / Site Address *</label>
           <input
             id="location"
             type="text"
             placeholder="e.g. Sector 4 Water Point, North Ridge"
             value={location}
             onChange={(e) => setLocation(e.target.value)}
-            className={errors.location ? 'input-error' : ''}
+            className={`form-input ${errors.location ? 'has-error' : ''}`}
             maxLength={255}
           />
-          {errors.location && <span className="field-error">{errors.location}</span>}
+          {errors.location && <span className="error-text">{errors.location}</span>}
         </div>
 
-        <div className="form-group">
-          <label htmlFor="description">Issue Description *</label>
+        <div className="field-group">
+          <label htmlFor="description" className="field-label">Detailed Problem Description *</label>
           <textarea
             id="description"
-            rows={4}
-            placeholder="Describe the issue, damage, or operational disruption in detail..."
+            rows={5}
+            placeholder="Describe the problem, severity, affected equipment, or immediate safety hazard..."
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className={errors.description ? 'input-error' : ''}
+            className={`form-textarea ${errors.description ? 'has-error' : ''}`}
             maxLength={5000}
           />
-          <div className="form-help">
-            <span>{description.length}/5000 characters</span>
-            {errors.description && <span className="field-error">{errors.description}</span>}
+          <div className="textarea-footer">
+            <span className="char-count">{description.length} / 5000 characters</span>
+            {errors.description && <span className="error-text">{errors.description}</span>}
           </div>
         </div>
 
-        <div className="form-actions">
+        <div className="form-action-bar">
           <button
             type="button"
-            className="btn btn-secondary"
+            className="btn btn-outline"
             onClick={() => handleSubmit('draft')}
             disabled={submitting}
           >
-            💾 Save as Draft
+            Save as Draft
           </button>
           <button
             type="button"
@@ -202,7 +201,7 @@ export default function ReportForm({ onReportCreated, isOnline }) {
             onClick={() => handleSubmit('submitted')}
             disabled={submitting}
           >
-            🚀 Submit Report
+            Submit Report
           </button>
         </div>
       </form>

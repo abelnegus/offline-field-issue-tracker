@@ -26,11 +26,9 @@ export default function App() {
     }
   }, []);
 
-  // 1. Initial setup & online status listeners
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
-      // Auto sync when coming online
       syncAllReports().catch((err) => console.warn('Auto sync on online event failed:', err));
     };
 
@@ -41,7 +39,6 @@ export default function App() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Initial seed check and data load
     (async () => {
       try {
         await seedDemoData();
@@ -50,13 +47,11 @@ export default function App() {
       }
       await fetchReports();
 
-      // Startup sync attempt if online
       if (navigator.onLine) {
         syncAllReports().catch((err) => console.warn('Startup sync failed:', err));
       }
     })();
 
-    // Subscribe to sync manager events
     const unsubscribeSync = subscribeToSyncEvents(() => {
       fetchReports();
     });
@@ -78,7 +73,7 @@ export default function App() {
   };
 
   return (
-    <div className="app-container">
+    <div className="app-shell">
       <Navbar
         role={role}
         onRoleChange={setRole}
@@ -86,42 +81,45 @@ export default function App() {
         onReportCreated={fetchReports}
       />
 
-      <main className="main-content">
+      <main className="app-main">
         {!isOnline && (
-          <div className="offline-banner">
-            <span>📡 You are working offline. All reports are saved locally to IndexedDB and will sync when network is restored.</span>
+          <div className="system-banner offline-banner">
+            <span className="banner-dot"></span>
+            <span>Operating in Offline Mode — Reports are saved locally to IndexedDB and will synchronize automatically when connectivity is restored.</span>
           </div>
         )}
 
-        <div className="tab-navigation">
-          <button
-            className={`tab-btn ${activeTab === 'list' ? 'active' : ''}`}
-            onClick={() => setActiveTab('list')}
-          >
-            📋 Reports Dashboard ({reports.length})
-          </button>
-          <button
-            className={`tab-btn ${activeTab === 'create' ? 'active' : ''}`}
-            onClick={() => {
-              setSelectedReportId(null);
-              setActiveTab('create');
-            }}
-          >
-            ➕ New Report
-          </button>
+        <div className="app-subhead">
+          <div className="view-tabs">
+            <button
+              className={`view-tab-btn ${activeTab === 'list' ? 'is-active' : ''}`}
+              onClick={() => setActiveTab('list')}
+            >
+              Reports Dashboard ({reports.length})
+            </button>
+            <button
+              className={`view-tab-btn ${activeTab === 'create' ? 'is-active' : ''}`}
+              onClick={() => {
+                setSelectedReportId(null);
+                setActiveTab('create');
+              }}
+            >
+              + Create New Report
+            </button>
+          </div>
         </div>
 
         {loading ? (
-          <div className="loading-container">
-            <p>Loading local reports database...</p>
+          <div className="loading-panel">
+            <p>Initializing local database...</p>
           </div>
         ) : (
-          <div className="content-layout">
+          <div className="view-content">
             {activeTab === 'create' ? (
               <ReportForm onReportCreated={handleReportCreated} isOnline={isOnline} />
             ) : (
-              <div className="dashboard-grid">
-                <div className={`list-column ${selectedReportId ? 'has-selection' : ''}`}>
+              <div className={`workspace-split ${selectedReportId ? 'has-detail' : ''}`}>
+                <div className="split-list-pane">
                   <ReportList
                     reports={reports}
                     selectedReportId={selectedReportId}
@@ -131,7 +129,7 @@ export default function App() {
                 </div>
 
                 {selectedReportId && (
-                  <div className="detail-column">
+                  <div className="split-detail-pane">
                     <ReportDetail
                       reportId={selectedReportId}
                       role={role}

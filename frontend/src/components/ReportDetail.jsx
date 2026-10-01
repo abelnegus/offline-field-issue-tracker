@@ -9,27 +9,27 @@ import { syncSingleReport } from '../services/syncManager.js';
 import { updateReportStatus as apiUpdateStatus, getReportHistory as apiGetHistory } from '../services/api.js';
 
 const CATEGORY_LABELS = {
-  water_point: '💧 Water Point',
-  equipment: '⚡ Equipment',
-  service_interruption: '🚫 Service Interruption',
-  safety: '⚠️ Safety',
-  maintenance: '🔧 Maintenance',
-  other: '📦 Other',
+  water_point: 'Water Point',
+  equipment: 'Equipment',
+  service_interruption: 'Service Interruption',
+  safety: 'Safety Hazard',
+  maintenance: 'General Maintenance',
+  other: 'Other Infrastructure',
 };
 
 const VALID_TRANSITIONS = {
-  draft: [{ target: 'submitted', label: '🚀 Submit Report', roles: ['field_worker', 'coordinator'] }],
+  draft: [{ target: 'submitted', label: 'Submit Report', roles: ['field_worker', 'coordinator'] }],
   submitted: [
-    { target: 'assigned', label: '📌 Assign Report', roles: ['coordinator'] },
-    { target: 'rejected', label: '❌ Reject Report', roles: ['coordinator'], danger: true },
+    { target: 'assigned', label: 'Assign Report', roles: ['coordinator'], primary: true },
+    { target: 'rejected', label: 'Reject Report', roles: ['coordinator'], danger: true },
   ],
   assigned: [
-    { target: 'in_progress', label: '⚙️ Move to In Progress', roles: ['coordinator'] },
-    { target: 'rejected', label: '❌ Reject Report', roles: ['coordinator'], danger: true },
+    { target: 'in_progress', label: 'Start Work (In Progress)', roles: ['coordinator'], primary: true },
+    { target: 'rejected', label: 'Reject Report', roles: ['coordinator'], danger: true },
   ],
   in_progress: [
-    { target: 'resolved', label: '✅ Mark Resolved', roles: ['coordinator'] },
-    { target: 'rejected', label: '❌ Reject Report', roles: ['coordinator'], danger: true },
+    { target: 'resolved', label: 'Mark Resolved', roles: ['coordinator'], success: true },
+    { target: 'rejected', label: 'Reject Report', roles: ['coordinator'], danger: true },
   ],
   resolved: [],
   rejected: [],
@@ -49,19 +49,15 @@ export default function ReportDetail({ reportId, role, isOnline, onClose, onRepo
     setActionError(null);
 
     try {
-      // 1. Fetch local report
       const localRep = await getReport(reportId);
       setReport(localRep);
 
-      // 2. Fetch local history
       const localHist = await getLocalReportHistory(reportId);
 
-      // 3. If synced & online, fetch server history to enrich
       let mergedHistory = [...localHist];
       if (localRep?.syncStatus === 'synced' && isOnline) {
         try {
           const serverHist = await apiGetHistory(reportId);
-          // Combine unique history entries by timestamp/event_type
           const existingKeys = new Set(localHist.map((h) => `${h.eventType}_${h.timestamp}`));
           serverHist.forEach((sh) => {
             const key = `${sh.event_type}_${sh.timestamp}`;
@@ -79,14 +75,14 @@ export default function ReportDetail({ reportId, role, isOnline, onClose, onRepo
             }
           });
         } catch {
-          // Fall back to local history
+          // Ignore server fetch errors
         }
       }
 
       mergedHistory.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
       setHistory(mergedHistory);
     } catch (err) {
-      setActionError(`Error loading report details: ${err.message}`);
+      setActionError(`Error loading report: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -105,14 +101,14 @@ export default function ReportDetail({ reportId, role, isOnline, onClose, onRepo
     try {
       const res = await syncSingleReport(report.id);
       if (res.success) {
-        setActionSuccess('Sync succeeded! Report is now synchronized with server.');
+        setActionSuccess('Report synchronized with server successfully.');
       } else {
-        setActionError(`Sync failed: ${res.error || 'Server unreachable'}`);
+        setActionError(`Sync failed: ${res.error || 'Server connection error'}`);
       }
       await loadData();
       if (onReportUpdated) onReportUpdated();
     } catch (err) {
-      setActionError(`Retry attempt failed: ${err.message}`);
+      setActionError(`Retry failed: ${err.message}`);
     } finally {
       setRetrying(false);
     }
@@ -127,7 +123,6 @@ export default function ReportDetail({ reportId, role, isOnline, onClose, onRepo
     const now = new Date().toISOString();
 
     try {
-      // 1. Update locally first
       const updatedReport = {
         ...report,
         status: newStatus,
@@ -142,19 +137,16 @@ export default function ReportDetail({ reportId, role, isOnline, onClose, onRepo
         toStatus: newStatus,
         timestamp: now,
         source: 'local',
-        details: `Status updated from ${oldStatus.toUpperCase()} to ${newStatus.toUpperCase()} by ${role}.`,
+        details: `Status changed from ${oldStatus.toUpperCase()} to ${newStatus.toUpperCase()} by ${role.replace('_', ' ')}.`,
       });
 
-      // 2. If already synced & online, update backend
       if (report.syncStatus === 'synced' && isOnline) {
         try {
           await apiUpdateStatus(report.id, newStatus);
         } catch (apiErr) {
-          // If backend transition fails (e.g., status conflict), record error
-          setActionError(`Backend transition warning: ${apiErr.message}`);
+          setActionError(`Backend warning: ${apiErr.message}`);
         }
       } else if (report.syncStatus === 'synced' && !isOnline) {
-        // If offline and was synced, mark pending sync for update
         await updateReport({
           ...updatedReport,
           syncStatus: 'pending',
@@ -171,17 +163,17 @@ export default function ReportDetail({ reportId, role, isOnline, onClose, onRepo
 
   if (loading) {
     return (
-      <div className="card report-detail-card">
-        <p>Loading report details...</p>
+      <div className="panel detail-panel">
+        <p className="loading-text">Loading report details...</p>
       </div>
     );
   }
 
   if (!report) {
     return (
-      <div className="card report-detail-card">
+      <div className="panel detail-panel">
         <p>Report not found.</p>
-        <button className="btn btn-secondary" onClick={onClose}>
+        <button className="btn btn-outline" onClick={onClose}>
           Close
         </button>
       </div>
@@ -193,110 +185,110 @@ export default function ReportDetail({ reportId, role, isOnline, onClose, onRepo
   );
 
   return (
-    <div className="card report-detail-card">
-      <div className="detail-header">
+    <div className="panel detail-panel">
+      <div className="detail-panel-header">
         <div>
-          <h2>Report Details</h2>
-          <span className="report-id-text">ID: {report.id}</span>
+          <h2 className="detail-title">{CATEGORY_LABELS[report.category] || report.category}</h2>
+          <span className="detail-id">ID: {report.id}</span>
         </div>
-        <button className="close-btn" onClick={onClose} aria-label="Close report detail">
+        <button className="panel-close-btn" onClick={onClose} aria-label="Close detail view">
           ×
         </button>
       </div>
 
-      {actionError && <div className="alert alert-error">{actionError}</div>}
-      {actionSuccess && <div className="alert alert-success">{actionSuccess}</div>}
+      {actionError && <div className="form-alert alert-error">{actionError}</div>}
+      {actionSuccess && <div className="form-alert alert-success">{actionSuccess}</div>}
 
       {/* Sync Status Alert Banner */}
-      <div className={`sync-banner sync-banner-${report.syncStatus}`}>
-        <div className="sync-banner-info">
-          <span className="sync-banner-icon">
-            {report.syncStatus === 'pending' && '⏳'}
-            {report.syncStatus === 'syncing' && '🔄'}
-            {report.syncStatus === 'synced' && '✅'}
-            {report.syncStatus === 'failed' && '❌'}
-          </span>
-          <div>
-            <strong>
+      <div className={`sync-status-box sync-box-${report.syncStatus}`}>
+        <div className="sync-box-content">
+          <div className="sync-box-header">
+            <span className="sync-box-title">
               Sync State: {report.syncStatus.toUpperCase()}
-            </strong>
-            {report.syncStatus === 'failed' && report.syncError && (
-              <p className="sync-error-text">Error: {report.syncError}</p>
-            )}
-            {report.syncStatus === 'pending' && (
-              <p className="sync-error-text">Saved locally. Waiting to synchronize with server.</p>
-            )}
+            </span>
           </div>
+          {report.syncStatus === 'failed' && report.syncError && (
+            <p className="sync-box-msg">{report.syncError}</p>
+          )}
+          {report.syncStatus === 'pending' && (
+            <p className="sync-box-msg">Report saved locally. Awaiting network connection to sync with server.</p>
+          )}
+          {report.syncStatus === 'synced' && (
+            <p className="sync-box-msg">Report is fully synchronized with central server.</p>
+          )}
         </div>
 
         {(report.syncStatus === 'pending' || report.syncStatus === 'failed') && (
           <button
-            className="btn btn-sync-retry"
+            className="btn btn-outline btn-sm"
             onClick={handleRetrySync}
             disabled={retrying}
           >
-            {retrying ? 'Retrying...' : '🔄 Retry Sync'}
+            {retrying ? 'Retrying...' : 'Retry Sync'}
           </button>
         )}
       </div>
 
-      {/* Report Fields */}
-      <div className="detail-grid">
-        <div className="detail-item">
-          <span className="detail-label">Category</span>
-          <span className="detail-value">{CATEGORY_LABELS[report.category] || report.category}</span>
-        </div>
-
-        <div className="detail-item">
-          <span className="detail-label">Priority</span>
-          <span className={`badge priority-${report.priority}`}>
+      {/* Structured Details */}
+      <div className="detail-data-grid">
+        <div className="data-cell">
+          <span className="cell-label">PRIORITY</span>
+          <span className={`badge-pill priority-${report.priority}`}>
             {report.priority.toUpperCase()}
           </span>
         </div>
 
-        <div className="detail-item">
-          <span className="detail-label">Business Status</span>
-          <span className={`badge status-${report.status}`}>
+        <div className="data-cell">
+          <span className="cell-label">BUSINESS STATUS</span>
+          <span className={`badge-pill status-${report.status}`}>
             {report.status.replace('_', ' ').toUpperCase()}
           </span>
         </div>
 
-        <div className="detail-item">
-          <span className="detail-label">Location</span>
-          <span className="detail-value">📍 {report.location}</span>
+        <div className="data-cell full-width">
+          <span className="cell-label">LOCATION</span>
+          <span className="cell-value-text">📍 {report.location}</span>
         </div>
 
-        <div className="detail-item full-width">
-          <span className="detail-label">Description</span>
-          <p className="detail-description">{report.description}</p>
+        <div className="data-cell full-width">
+          <span className="cell-label">DESCRIPTION</span>
+          <p className="cell-description-box">{report.description}</p>
         </div>
 
-        <div className="detail-item">
-          <span className="detail-label">Reported At</span>
-          <span className="detail-value">{new Date(report.reportedAt).toLocaleString()}</span>
+        <div className="data-cell">
+          <span className="cell-label">REPORTED AT</span>
+          <span className="cell-sub-text">{new Date(report.reportedAt).toLocaleString()}</span>
         </div>
 
-        <div className="detail-item">
-          <span className="detail-label">Last Updated</span>
-          <span className="detail-value">{new Date(report.updatedAt).toLocaleString()}</span>
+        <div className="data-cell">
+          <span className="cell-label">LAST UPDATED</span>
+          <span className="cell-sub-text">{new Date(report.updatedAt).toLocaleString()}</span>
         </div>
       </div>
 
-      {/* Workflow Action Panel */}
-      <div className="workflow-actions-section">
-        <h3>⚡ Status Transitions ({role === 'field_worker' ? 'Field Worker' : 'Coordinator'})</h3>
+      {/* Workflow Controls Section */}
+      <div className="workflow-control-section">
+        <h3 className="section-heading">
+          Status Workflow Actions <span className="role-context">({role === 'field_worker' ? 'Field Worker' : 'Coordinator'})</span>
+        </h3>
         {allowedActions.length === 0 ? (
-          <p className="no-actions-text">
+          <p className="workflow-muted-note">
             {['resolved', 'rejected'].includes(report.status)
-              ? 'This report is in a terminal state. No further status changes allowed.'
-              : `No actions available for role "${role}" at status "${report.status.toUpperCase()}". Switch to Coordinator to manage workflow.`}
+              ? 'Report is in a terminal state. No further status changes permitted.'
+              : `No actions available for role "${role === 'field_worker' ? 'Field Worker' : 'Coordinator'}" at status "${report.status.toUpperCase()}". Switch roles in the navbar to manage coordinator workflow.`}
           </p>
         ) : (
-          <div className="action-buttons-group">
+          <div className="workflow-btn-row">
             {allowedActions.map((act) => (
               <button
                 key={act.target}
-                className={`btn ${act.danger ? 'btn-danger' : 'btn-action'}`}
+                className={`btn ${
+                  act.danger
+                    ? 'btn-danger'
+                    : act.success
+                    ? 'btn-success'
+                    : 'btn-primary'
+                }`}
                 onClick={() => handleStatusTransition(act.target)}
               >
                 {act.label}
@@ -306,45 +298,32 @@ export default function ReportDetail({ reportId, role, isOnline, onClose, onRepo
         )}
       </div>
 
-      {/* History Timeline */}
-      <div className="history-section">
-        <h3>📜 History Timeline</h3>
+      {/* Activity Timeline */}
+      <div className="history-activity-section">
+        <h3 className="section-heading">History Timeline</h3>
         {history.length === 0 ? (
-          <p className="no-actions-text">No history events logged yet.</p>
+          <p className="workflow-muted-note">No history records logged yet.</p>
         ) : (
-          <ul className="timeline">
+          <div className="activity-timeline">
             {history.map((evt) => (
-              <li key={evt.id || `${evt.eventType}_${evt.timestamp}`} className="timeline-item">
-                <div className="timeline-badge">
-                  {evt.eventType.includes('CREATE') && '🌱'}
-                  {evt.eventType.includes('STATUS') && '🔄'}
-                  {evt.eventType.includes('SYNC_STARTED') && '⏳'}
-                  {evt.eventType.includes('SYNC_SUCCEEDED') && '✅'}
-                  {evt.eventType.includes('SYNC_FAILED') && '❌'}
-                </div>
-                <div className="timeline-content">
-                  <div className="timeline-header">
-                    <span className="timeline-event-name">
-                      {evt.eventType.replace('_', ' ')}
-                    </span>
-                    <span className="timeline-source-badge">
-                      {evt.source}
-                    </span>
-                    <span className="timeline-time">
-                      {new Date(evt.timestamp).toLocaleString()}
-                    </span>
+              <div key={evt.id || `${evt.eventType}_${evt.timestamp}`} className="timeline-row">
+                <div className="timeline-node"></div>
+                <div className="timeline-card">
+                  <div className="timeline-card-header">
+                    <span className="event-type-name">{evt.eventType.replace('_', ' ')}</span>
+                    <span className="source-tag">{evt.source}</span>
+                    <span className="event-timestamp">{new Date(evt.timestamp).toLocaleString()}</span>
                   </div>
                   {evt.fromStatus && evt.toStatus && (
-                    <div className="timeline-transition">
-                      Status: <span className="badge status-small">{evt.fromStatus}</span> →{' '}
-                      <span className="badge status-small">{evt.toStatus}</span>
+                    <div className="event-transition-text">
+                      Status: <code>{evt.fromStatus}</code> → <code>{evt.toStatus}</code>
                     </div>
                   )}
-                  {evt.details && <p className="timeline-details">{evt.details}</p>}
+                  {evt.details && <p className="event-detail-text">{evt.details}</p>}
                 </div>
-              </li>
+              </div>
             ))}
-          </ul>
+          </div>
         )}
       </div>
     </div>
